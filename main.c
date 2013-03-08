@@ -1,7 +1,5 @@
-#include <msp430.h>
-#include "adf7021n.h"
+#include "ossi_comms.h"
 
-int step = 10;
 
 uint8_t sendData[18] = {'H','e','l','l','o',' ','T','h','i','s',' ','i','s',' ','O','S','S','I'};
 char *dstAddr ="CQ    ";

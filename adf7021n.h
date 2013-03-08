@@ -8,42 +8,7 @@
 #ifndef ADF7021N_H_
 #define ADF7021N_H_
 
-#include  <msp430x16x.h>
-#include "global.h"
-
-
-// Port 1
-#define RX_MUXOUT_PIN	(BIT1)
-#define RX_CLK_PIN 		(BIT2)
-#define RX_DATA_PIN 	(BIT3)
-#define RX_SWD_PIN 		(BIT4)
-#define RX_SCLK_PIN 	(BIT5)
-#define RX_SREAD_PIN 	(BIT6)
-#define RX_SDATA_PIN 	(BIT7)
-
-
-// Port 2
-#define RX_SLE_PIN 		(BIT0)
-#define RX_CE_PIN 		(BIT1)
-#define TX_MUXOUT_PIN	(BIT2)
-#define TX_CLK_PIN 		(BIT3) // INPUT
-#define TX_DATA_PIN 	(BIT4)
-#define TX_SCLK_PIN 	(BIT5)
-#define TX_SREAD_PIN 	(BIT6)
-#define TX_SDATA_PIN 	(BIT7)
-
-// Port 3
-
-// Port 4
-#define TX_SLE_PIN 		(BIT0)
-#define TX_CE_PIN 		(BIT1)
-#define TX_ON_PIN 		(BIT2)
-#define RX_ON_PIN 		(BIT3)
-#define PA_ON_PIN 		(BIT4)
-
-// Port 5
-
-// Port 6
+#include "ossi_comms.h"
 
 
 #define TX_XTAL 		(19200000)
