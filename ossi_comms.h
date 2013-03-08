@@ -49,8 +49,8 @@
 // PORT4
 #define TX_SLE_PIN 			(BIT0)
 #define TX_CE_PIN 			(BIT1)
-#define TX_ON_PIN 			(BIT2)
-#define RX_ON_PIN 			(BIT3)
+#define TX_ON_PIN 			(BIT2) // RF Switch HIGH: Tx / Low: RX
+#define UNUSED4_3 			(BIT3)
 #define PA_ON_PIN 			(BIT4)
 #define UNUSED4_5			(BIT5)
 #define EXT_WDT_PIN			(BIT6)

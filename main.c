@@ -55,14 +55,10 @@ int main(void) {
 //	P4OUT |= 0x04;
 
 
-
-
-
 //
 //	// for Data Rate = 1200 bps
 //	adf7021n_setDemodDivider(11);
 //	adf7021n_setCDRDivider(45);
-
 
 
 
@@ -71,17 +67,9 @@ int main(void) {
 //	P4OUT |= 0x10;
 //
 
-//	adf7021n_txCarriertest();
 
 
-
-
-
-
-
-
-
-
+	_EINT();
 	while(1) {
 
 
@@ -143,7 +131,9 @@ int main(void) {
 
 
 	//  Best setting so far
-		adf7021n_setVcoBias(7);
+//		adf7021n_setVcoBias(7); // 7 shape was the best but the datasheet recommend 8 as the minimum
+
+		adf7021n_setVcoBias(8);
 		adf7021n_setVcoAdjust(3);
 
 
@@ -181,7 +171,7 @@ int main(void) {
 		__delay_cycles(1000000);
 		__delay_cycles(1000000);
 
-		_EINT();
+
 
 	 	ax25_makePacket(dstAddr, srcAddr, sendData, sizeof(sendData));
 	 	P2IFG &= ~BIT3; // P2.3 IFG cleared just in case

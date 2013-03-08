@@ -439,13 +439,19 @@ typedef struct {
 	} r15;
 } adf7021n_config;
 
-void ax25_makePacket(char* dstAddr, char* srcAddr, uint8_t* data, uint8_t dataSize);
 
 void adf7021n_portSetup(void);
-void adf7021n_txInit(void);
 
+void adf7021n_txInit(void);
 void adf7021n_txEnable(void);
 void adf7021n_txDisable(void);
+
+void adf7021n_rxInit(void);
+void adf7021n_rxEnable(void);
+void adf7021n_rxDisable(void);
+
+void ax25_makePacket(char* dstAddr, char* srcAddr, uint8_t* data, uint8_t dataSize);
+uint8_t ax25_decodePacket(uint8_t* data, uint8_t dataSize);
 
 
 // Register 0 set / get functions
