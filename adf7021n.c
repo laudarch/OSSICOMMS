@@ -43,14 +43,22 @@ uint16_t bytes_step = 0;
 uint8_t inbyte;
 
 typedef enum {
-	AX25_START,
-	AX25_DATA,
-	AX25_FCS,
-	AX25_END
+	AX25_TX_START,
+	AX25_TX_DATA,
+	AX25_TX_FCS,
+	AX25_TX_END
 } TX_PACKET_FRAME;
 
-TX_PACKET_FRAME ax25_packet_mode;
+typedef enum {
+	AX25_RX_IDLE,
+	AX25_RX_START,
+	AX25_RX_DATA,
+	AX25_RX_FCS,
+	AX25_RX_END
+} RX_PACKET_FRAME ;
 
+TX_PACKET_FRAME ax25_tx_mode;
+RX_PACKET_FRAME ax25_rx_mode;
 
 
 adf7021n_config adf7021nReg;
@@ -1068,14 +1076,6 @@ unsigned char adf7021n_getMode()
 
 
 
-void adf7021n_recvStart()
-{
-	//adf7021n_enable_data_interrupt();
-	adf7021n_rx();
-	P1IES |= RX_CLK_PIN; // interrupt hi/lo falling edge
-	P1IFG &= ~RX_CLK_PIN; // P1.2 IFG cleared just in case
-	P1IE |= RX_CLK_PIN; // interrupt enable
-}
 
 void TX_PA_PowerOn()
 {
@@ -1094,15 +1094,16 @@ void TX_PA_PowerOn()
 void adf7021n_sendStart(void)
 {
 	sendPacket();
-//	P2OUT |= TX_DATA_PIN;//TODO: default data status???? high or low??
-	P2OUT &= ~TX_DATA_PIN;//TODO: default data status???? high or low??
+	P2OUT &= ~TX_DATA_PIN;//default data status = low
 
 	adf7021n_regWrite(0x0000000F, TX);
 	adf7021n_tx(); // set ADF register
 	TX_PA_PowerOn(); // PA on
-	ax25_packet_mode = AX25_START;
+	ax25_tx_mode = AX25_TX_START;
 	bytes_step=0;
 	bits_step=0;
+	inbyte = 0;
+
 }
 
 void flipout(void)
@@ -1130,7 +1131,7 @@ void sendByte()
 	// NRZI
 	volatile uint8_t bt;
 	bt = inbyte & 0x01;
-	if(ax25_packet_mode == AX25_DATA)
+	if(ax25_tx_mode == AX25_TX_DATA)
 	{
 		fcsbit(bt);
 	}
@@ -1141,7 +1142,7 @@ void sendByte()
 	else
 	{
 		stuff++;
-		if((ax25_packet_mode == AX25_DATA || ax25_packet_mode == AX25_FCS) && (stuff == 5))
+		if((ax25_tx_mode == AX25_TX_DATA || ax25_tx_mode == AX25_TX_FCS) && (stuff == 5))
 		{
 			flipout();
 			bits_step--;
@@ -1167,11 +1168,11 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 	switch (P2IFG & BIT3) {
 		case BIT3:
 			//flag 100 times
-			if(ax25_packet_mode == AX25_START)
+			if(ax25_tx_mode == AX25_TX_START)
 			{
 				// if send 20 times, go to AX25_DATA
 				if (bytes_step > 100) {
-					ax25_packet_mode = AX25_DATA;
+					ax25_tx_mode = AX25_TX_DATA;
 					bytes_step = 0; // prepare to go next mode.
 					bits_step = 0;
 					//P2IFG &= ~BIT3; // P2.3 IFG cleared
@@ -1182,11 +1183,11 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 					inbyte = 0x7E;
 				}
 				sendByte();
-			} else if(ax25_packet_mode == AX25_DATA) //data
+			} else if(ax25_tx_mode == AX25_TX_DATA) //data
 			{
 				// if sent all sendData, go to AX25_FCS
 				if (bytes_step > sizeof(txBuffer)-1) {
-					ax25_packet_mode = AX25_FCS;
+					ax25_tx_mode = AX25_TX_FCS;
 					bytes_step=0;
 					bits_step = 0;
 					//P2IFG &= ~BIT3; // P2.3 IFG cleared
@@ -1200,10 +1201,10 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 				// send bytes (based on sizeof txBuffer)
 				sendByte();
 
-			} else if(ax25_packet_mode == AX25_FCS) //fcs
+			} else if(ax25_tx_mode == AX25_TX_FCS) //fcs
 			{
 				if (bytes_step > sizeof(fcs)-1) {
-					ax25_packet_mode = AX25_END;
+					ax25_tx_mode = AX25_TX_END;
 					bytes_step=0;
 					bits_step = 0;
 					//P2IFG &= ~BIT3; // P2.3 IFG cleared
@@ -1222,7 +1223,7 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 				if (bytes_step == 1) sendByte();
 
 				// go to AX25_END
-			} else if(ax25_packet_mode == AX25_END) //flag 1 times
+			} else if(ax25_tx_mode == AX25_TX_END) //flag 1 times
 			{
 				// if send 10 times, go to AX25_DATA
 				if (bytes_step > 10) {
@@ -1231,7 +1232,7 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 
 					P4OUT &= ~TX_CE_PIN;
 //					IO_SET(TX_CE, LOW);
-					ax25_packet_mode = AX25_START;
+					ax25_tx_mode = AX25_TX_START;
 					bytes_step = 0; // prepare to go next mode.
 					bits_step = 0;
 					//P2IFG &= ~BIT3; // P2.3 IFG cleared
@@ -1260,10 +1261,39 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 }
 
 
-void readByte()
+volatile uint8_t cbyte;
+volatile uint8_t flagTest, newbit, numbyte,numbit, ones;
+#define RX_BUFFER_SIZE (64)
+uint8_t rxBuffer[RX_BUFFER_SIZE]={0};
+
+void adf7021n_recvStart()
 {
+	cbyte = 0;
+	flagTest = 0;
+	numbyte = 0;
+	numbit = 0;
+	ones = 0;
+	//adf7021n_enable_data_interrupt();
+	adf7021n_rx();
+	P1IES |= RX_CLK_PIN; // interrupt hi/lo falling edge
+	P1IFG &= ~RX_CLK_PIN; // P1.2 IFG cleared just in case
+	P1IE |= RX_CLK_PIN; // interrupt enable
+	ax25_rx_mode = AX25_RX_IDLE;
 
 }
+
+uint8_t bitin(void)
+{
+	static uint8_t oldstate;
+	if((P1IN & RX_DATA_PIN) != oldstate)
+	{
+		oldstate = (P1IN & RX_DATA_PIN);
+		return 0;
+	}
+	return 1;
+}
+
+
 
 // Port 1 interrupt service routine
 #pragma vector=PORT1_VECTOR
@@ -1272,17 +1302,123 @@ __interrupt void adf7021n_Data_Rx_handler(void)
 	switch(P1IFG & RX_CLK_PIN)
 	{
 	case RX_CLK_PIN:
-		if(P1IN & RX_DATA_PIN)
+		if (ax25_rx_mode == AX25_RX_IDLE)
 		{
-			P5OUT |= LED1_PIN;
-		}
+			if(bitin())
+			{
+				cbyte = 0x80 | (cbyte >> 1);
+			}
+			else
+			{
+				cbyte = 0x7F & (cbyte >> 1);
+			}
 
-		else if((P1IN & RX_DATA_PIN) == 0)
+
+			if(cbyte == 0x7E)
+			{
+				P5OUT |= LED1_PIN; // DCD led on
+				ax25_rx_mode = AX25_RX_START;
+			}
+
+		}
+		else if (ax25_rx_mode == AX25_RX_START)
 		{
-			P5OUT &= ~LED1_PIN;
+
+			if(bitin())
+			{
+				cbyte = 0x80 | (cbyte >> 1);
+			}
+			else
+			{
+				cbyte = 0x7F & (cbyte >> 1);
+			}
+			numbit++;
+
+			if(numbit > 7 )
+			{
+				numbit = 0;
+				if(cbyte != 0x7E)
+				{
+					rxBuffer[0] = cbyte;
+					numbyte = 1;
+					ax25_rx_mode = AX25_RX_DATA;
+					flagTest = 0;
+					P1IFG &= ~RX_CLK_PIN;
+					break;
+				}
+
+			}
+
+		}
+		else if (ax25_rx_mode == AX25_RX_DATA)
+		{
+
+			if(flagTest)
+			{
+				// a flag is encountered
+				P5OUT &= ~LED1_PIN; // DCD led off
+
+				cbyte = 0;
+				flagTest = 0;
+				numbyte = 0;
+				numbit = 0;
+				ax25_rx_mode = AX25_RX_IDLE;
+				P1IFG &= ~RX_CLK_PIN;
+				break;
+			}
+
+			if(flagTest != 1)
+			{
+
+				newbit = bitin();
+				if(newbit == 1)
+				{
+					ones++;
+				}
+				else {
+					ones = 0;
+				}
+
+				if(ones == 5)
+				{
+					flagTest = bitin();
+					ones = 0;
+				}
+
+				if(newbit)
+				{
+					cbyte = 0x80 | (cbyte >> 1);
+				}
+				else
+				{
+					cbyte = 0x7F & (cbyte >> 1);
+				}
+				numbit++;
+
+
+				if(numbit > 7)
+				{
+					newbit = 0;
+					numbit = 0;
+
+					if(flagTest == 0)
+					{
+						rxBuffer[numbyte] = cbyte;
+						numbyte++;
+						P1IFG &= ~RX_CLK_PIN;
+						break;
+					}
+					P1IFG &= ~RX_CLK_PIN;
+					break;
+				}
+
+
+			}
+
 		}
 
 		P1IFG &= ~RX_CLK_PIN;
+
 		break;
 	default:
 		P1IFG = 0;
