@@ -24,7 +24,7 @@
 #define VALID_PREAMBLE_BYTE_1   0x55
 #define VALID_PREAMBLE_BYTE_2   0xAA
 
-#define SYNC_WORD1 0xD3                // First byte of sync word
+#define SYNC_WORD1 0x7E                // First byte of sync word
 #define SYNC_WORD2 0x91                // Second byte of sync word
 
 #define HEADER_SIZE     4       // 4 bytes header

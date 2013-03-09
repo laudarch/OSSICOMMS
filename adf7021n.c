@@ -200,6 +200,8 @@ void adf7021n_initRegisterZero(uint8_t mode)
 
 	if (mode == RX)
 	{
+//		adf7021nReg.r0.fractional_n = 27051; // fOut - 100kHz setting for RX!!!! Eval board setting
+		adf7021nReg.r0.fractional_n = 27066; // fOut - 100kHz setting for RX!!!! Our setting / tuned for some offset error
 		adf7021nReg.r0.tx_rx = ADF7021N_RX_MODE;
 	}
 }
@@ -355,8 +357,15 @@ void adf7021n_initAllRxRegisgers(void)
 {
 	adf7021n_initRegisterZero(RX);
 	adf7021n_initRegisterOne();
-	adf7021n_initRegisterTwo();
 	adf7021n_initRegisterThree(RX);
+	adf7021n_initRegisterFour();
+	adf7021n_initRegisterFive();
+}
+
+void adf7021n_rxInit(void)
+{
+	adf7021n_initAllRxRegisgers();
+
 }
 
 
@@ -848,8 +857,8 @@ void adf7021n_writeRegisterFour(uint8_t mode)
 			((uint32_t)(adf7021nReg.r4.demode_scheme & 0x07) << 4) |
 			((uint32_t)(adf7021nReg.r4.dot_product & 0x01) << 7) |
 			((uint32_t)(adf7021nReg.r4.rx_invert & 0x03)<< 8) |
-			((uint32_t)(adf7021nReg.r4.discriminator_bw & 0x7FF)<< 10) |
-			((uint32_t)(adf7021nReg.r4.post_demod_bw & 0x7FF)<< 20) |
+			((uint32_t)(adf7021nReg.r4.discriminator_bw & 0x3FF)<< 10) |
+			((uint32_t)(adf7021nReg.r4.post_demod_bw & 0x3FF)<< 20) |
 			((uint32_t)(adf7021nReg.r4.if_filter_bw & 0x03)<< 30);
 
 	adf7021n_regWrite(reg, mode);
@@ -1063,6 +1072,9 @@ void adf7021n_recvStart()
 {
 	//adf7021n_enable_data_interrupt();
 	adf7021n_rx();
+	P1IES |= RX_CLK_PIN; // interrupt hi/lo falling edge
+	P1IFG &= ~RX_CLK_PIN; // P1.2 IFG cleared just in case
+	P1IE |= RX_CLK_PIN; // interrupt enable
 }
 
 void TX_PA_PowerOn()
@@ -1145,6 +1157,8 @@ void sendPacket(void)
 	fcs = 0xffff;
 	stuff = 0;
 }
+
+
 
 // Port 2 interrupt service routine
 #pragma vector=PORT2_VECTOR
@@ -1246,77 +1260,34 @@ __interrupt void adf7021n_Data_Tx_handler(void)
 }
 
 
+void readByte()
+{
+
+}
+
 // Port 1 interrupt service routine
 #pragma vector=PORT1_VECTOR
 __interrupt void adf7021n_Data_Rx_handler(void)
 {
-	switch (mode) {
-		case RX:
-			ShiftReg = ShiftReg << 1;
-//			setShiftRegLSB(P5IN & BIT0);
-			setShiftRegLSB(P1IN & BIT3);
+	switch(P1IFG & RX_CLK_PIN)
+	{
+	case RX_CLK_PIN:
+		if(P1IN & RX_DATA_PIN)
+		{
+			P5OUT |= LED1_PIN;
+		}
 
-		    bits_step++;
+		else if((P1IN & RX_DATA_PIN) == 0)
+		{
+			P5OUT &= ~LED1_PIN;
+		}
 
-		    if (bits_step == 8) {
-		    	bits_step = 0;
-		    	switch(bytes_step){
-		    		case 0:
-		    			if (ShiftReg != SYNC_WORD2) {
-		    				mode = IDLE;
-		    			}
-		    			break;
-		    		case 1:
-		    			// header 0
-		    			break;
-		    		case 2:
-		    			// header 1
-		    			break;
-		    		case 3:
-		    			// byte size
-		    			break;
-		    		default:
-		    			adf702x_rx_buf[bytes_step-4] = ShiftReg;
-		    	}
-
-		        if(bytes_step > 4+6){ // 6 is data length
-	        	  P6OUT ^= BIT0;
-                  bytes_step = 0;
-		          mode = IDLE;
-		          // CE LOW?
-		        }
-		    	bytes_step++;
-
-		    }
-		    break;
-
-		case IDLE:
-			ShiftReg=ShiftReg<<1;
-//			setShiftRegLSB(P5IN & BIT0); RX_DATA
-			setShiftRegLSB(P1IN & BIT3);
-
-			if (preamble_found == 1) {
-				if (ShiftReg == SYNC_WORD1) {
-					bits_step=0;
-					bytes_step=0;
-					preamble_count=0;
-					preamble_found=0;
-					mode = RX;
-				}
-				break;
-			}
-
-			if ((ShiftReg == VALID_PREAMBLE_BYTE_1) || (ShiftReg == VALID_PREAMBLE_BYTE_2)) {
-				preamble_count++;
-			} else {
-				preamble_count = 0;
-				preamble_found = 0; //false
-			}
-
-			if (preamble_count >= 16) {
-				preamble_found = 1; //false
-			}
-			break;
+		P1IFG &= ~RX_CLK_PIN;
+		break;
+	default:
+		P1IFG = 0;
+		break;
 	}
-	P1IFG &= ~BIT2; // P1.2 IFG cleared
+
+
 }
