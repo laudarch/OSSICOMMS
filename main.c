@@ -28,6 +28,7 @@ int main(void) {
 	// fDev = 1200Hz
 	// Data Rate = 300 bps
 
+/*
 	adf7021n_rxInit();
 	adf7021n_rxEnable();
 	adf7021n_recvStart();
@@ -35,7 +36,7 @@ int main(void) {
 	P5OUT &= ~LED1_PIN;
 	P5DIR |= LED1_PIN;
 
-
+*/
 
 	// TX_XTAL = 19.2 MHz
 	// fOUT = 437.525 MHz
@@ -51,9 +52,8 @@ int main(void) {
 
 
 
-	_EINT();
 	while(1) {
-
+		__bis_SR_register(LPM3_bits + GIE);
 
 
      }
